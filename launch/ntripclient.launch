@@ -1,12 +1,19 @@
 <launch>
+
+    <arg name="ntrip_server" default="euref-ip.net:2101"/>
+    <arg name="ntrip_user" default=""/>
+    <arg name="ntrip_pass" default=""/>
+    <arg name="ntrip_stream" default="DARE00GBR0"/>
+
     <node pkg="ntrip_ros" type="ntripclient.py" name="ntrip_client" output="screen">
-        <param name="ntrip_server" value="euref-ip.net:2101" />
-        <param name="ntrip_user" value="" />
-        <param name="ntrip_pass" value="" />
-        <param name="ntrip_stream" value="DARE00GBR0" />
+        <param name="ntrip_server" value="$(arg ntrip_server)" />
+        <param name="ntrip_user" value="$(arg ntrip_user)" />
+        <param name="ntrip_pass" value="$(arg ntrip_pass)" />
+        <param name="ntrip_stream" value="$(arg ntrip_stream)" />
         <param name="nmea_gga" value="GPGGA,%02d%02d%04.2f,5212.9977,N,00653.9845,E,1,16,1.1,48.0,M,94.0,M,0,0" />
-        <param name="rtcm_topic" value="/rtcm" />
+        <remap from="rtcm" to="rtcm"/>
     </node>
+
 </launch>
 
 
