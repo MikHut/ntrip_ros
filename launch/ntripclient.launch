@@ -5,7 +5,7 @@
     <arg name="ntrip_pass" default=""/>
     <arg name="ntrip_stream" default="DARE00GBR0"/>
 
-    <node pkg="ntrip_ros" type="ntripclient.py" name="ntrip_client" output="screen">
+    <node pkg="ntrip_ros" type="ntripclient.py" name="ntrip_client" output="screen" respawn="true">
         <param name="ntrip_server" value="$(arg ntrip_server)" />
         <param name="ntrip_user" value="$(arg ntrip_user)" />
         <param name="ntrip_pass" value="$(arg ntrip_pass)" />

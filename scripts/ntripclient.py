@@ -6,7 +6,8 @@ import rospy
 from ntrip_ros.msg import RTCM
 
 import datetime
-from httplib import HTTPConnection
+import socket
+import httplib
 from base64 import b64encode
 from threading import Thread
 from std_msgs.msg import String
@@ -20,13 +21,31 @@ class ntripconnect(Thread):
 
 
     def run(self):
+        self.rmsg = RTCM()
+        connection, connected = self.connect()
+        while not self.stop:
+            try: 
+                if not connected:
+                    connection, connected = self.connect()
+                else:
+                    self.parse_and_pub()
+            except (socket.error, httplib.IncompleteRead) as ex:
+                print 'Exception: ', ex
+                connected = False
+                rospy.sleep(2.0)
+                continue
+        
+        print "Closing connection"
+        connection.close()
+
+    def connect(self):
         headers = {
             'Ntrip-Version': 'Ntrip/2.0',
             'User-Agent': 'NTRIP ntrip_ros',
             'Connection': 'close',
             'Authorization': 'Basic ' + b64encode(str(self.ntc.ntrip_user) + ':' + self.ntc.ntrip_pass)
         }
-        connection = HTTPConnection(self.ntc.ntrip_server)
+        connection = httplib.HTTPConnection(self.ntc.ntrip_server, timeout=5.0)
         now = datetime.datetime.utcnow()
         nmeadata = self.ntc.nmea_gga % (now.hour, now.minute, now.second)
 
@@ -50,29 +69,35 @@ class ntripconnect(Thread):
 
         connection.request('GET', '/'+self.ntc.ntrip_stream,nmeastring,headers)
 
-        response = connection.getresponse()
-        if response.status != 200: raise Exception("blah")
-        buf = ""
-        rmsg = RTCM()
-        while not self.stop:
-            data = response.read(1)
-            if data!=chr(211):
-                continue
-            l1 = ord(response.read(1))
-            l2 = ord(response.read(1))
-            pkt_len = ((l1&0x3)<<8)+l2
+        self.response = connection.getresponse()
+        if self.response.status != 200: 
+            raise Exception("blah")
+            return connection, False
+        else:
+            return connection, True
 
-            pkt = response.read(pkt_len)
-            parity = response.read(3)
-            if len(pkt) != pkt_len:
-                rospy.logerr("Length error: {} {}".format(len(pkt), pkt_len))
-                continue
-            rmsg.header.seq += 1
-            rmsg.header.stamp = rospy.get_rostime()
-            rmsg.data = data + chr(l1) + chr(l2) + pkt + parity
-            self.ntc.rtcm_pub.publish(rmsg)
-        connection.close()
 
+
+    def parse_and_pub(self):
+        print "reading data", self.rmsg.header.seq
+        data = self.response.read(1)
+        if data!=chr(211):
+            print "DATA ERROR"
+            return
+        l1 = ord(self.response.read(1))
+        l2 = ord(self.response.read(1))
+        pkt_len = ((l1&0x3)<<8)+l2
+        print 'data: ', data, 'packet len: ', pkt_len
+        pkt = self.response.read(pkt_len)
+        parity = self.response.read(3)
+        if len(pkt) != pkt_len:
+            rospy.logerr("Length error: {} {}".format(len(pkt), pkt_len))
+            return
+        self.rmsg.header.seq += 1
+        self.rmsg.header.stamp = rospy.get_rostime()
+        self.rmsg.data = data + chr(l1) + chr(l2) + pkt + parity
+        self.ntc.rtcm_pub.publish(self.rmsg)
+        print "done"
 
 class ntripclient:
 
@@ -99,6 +124,7 @@ class ntripclient:
         rospy.spin()
         if self.connection is not None:
           self.connection.stop = True
+          rospy.loginfo("Connection stopped")
 
 
 
